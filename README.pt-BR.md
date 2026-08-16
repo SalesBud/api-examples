@@ -1,10 +1,10 @@
 # Exemplos da API Salesbud
 
-Integrações que rodam contra a [API Salesbud](https://developers.salesbud.com.br) — em Node.js e
-Python, sem framework e quase sem dependência.
+Integrações que rodam contra a API Salesbud — em Node.js e Python, sem framework e quase sem
+dependência.
 
-O contrato está na [documentação](https://developers.salesbud.com.br/pt-br/). Este repositório é
-para as partes que erram com facilidade no código.
+Este repositório cobre as partes que erram com facilidade no código. A referência completa é
+publicada em `developers.salesbud.com.br`, que entra no ar junto com a API.
 
 *Read in [English](README.md).*
 
