@@ -1,0 +1,13 @@
+{
+  "name": "salesbud-api-examples-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "authenticate": "node examples/01-authenticate.js",
+    "list-meetings": "node examples/02-list-meetings.js",
+    "list-calls": "node examples/03-list-calls.js",
+    "transcript": "node examples/04-get-transcript.js"
+  }
+}
