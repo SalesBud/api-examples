@@ -1,0 +1,811 @@
+{
+  "info": {
+    "name": "Salesbud API v0.1.0",
+    "description": "Every route of the Salesbud API, with the token renewal and the cursor walk already wired up.\n\n**Before the first send:** duplicate the bundled environment, fill in `client_id` and `client_secret`, and select it. The collection issues and renews the token by itself — there is no \"get token\" step to remember.\n\nCredentials are issued by Salesbud for your company; they are not self-service. The secret is shown once, at creation.\n\nFull reference: https://docs.salesbud.com.br",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "/**",
+          " * Issues and renews the access token, so every request below just works.",
+          " *",
+          " * Client credentials has no refresh token — renewal is asking for a new one. Renewing on a timer",
+          " * alone is not enough, so the test script also clears the token on a 401 and the next send reissues.",
+          " */",
+          "",
+          "const RENEW_MARGIN_MS = 60 * 1000;",
+          "",
+          "const rawUrl = pm.request.url.toString();",
+          "const needsToken = !rawUrl.includes(\"/oauth/token\") && !rawUrl.includes(\"/health/\");",
+          "",
+          "function fresh() {",
+          "  const token = pm.environment.get(\"access_token\");",
+          "  const expiresAt = Number(pm.environment.get(\"token_expires_at\")) || 0;",
+          "  return Boolean(token) && Date.now() + RENEW_MARGIN_MS < expiresAt;",
+          "}",
+          "",
+          "if (needsToken && !fresh()) {",
+          "  const environmentSelected = Object.keys(pm.environment.toObject()).length > 0;",
+          "  if (!environmentSelected) {",
+          "    throw new Error(",
+          "      \"Select the Salesbud environment first — it holds the credential and the issued token.\",",
+          "    );",
+          "  }",
+          "",
+          "  const clientId = pm.environment.get(\"client_id\");",
+          "  const clientSecret = pm.environment.get(\"client_secret\");",
+          "  if (!clientId || !clientSecret) {",
+          "    throw new Error(",
+          "      \"Set client_id and client_secret in the environment. Credentials are issued by Salesbud; \" +",
+          "        \"they are not self-service.\",",
+          "    );",
+          "  }",
+          "",
+          "  pm.sendRequest(",
+          "    {",
+          "      url: `${pm.variables.replaceIn(\"{{base_url}}\")}/oauth/token`,",
+          "      method: \"POST\",",
+          "      header: { \"Content-Type\": \"application/x-www-form-urlencoded\" },",
+          "      body: {",
+          "        mode: \"urlencoded\",",
+          "        urlencoded: [",
+          "          { key: \"grant_type\", value: \"client_credentials\" },",
+          "          { key: \"client_id\", value: clientId },",
+          "          { key: \"client_secret\", value: clientSecret },",
+          "        ],",
+          "      },",
+          "    },",
+          "    (error, response) => {",
+          "      if (error) throw error;",
+          "",
+          "      const body = response.json();",
+          "      if (response.code !== 200) {",
+          "        throw new Error(",
+          "          `Token request failed (${response.code}): ${body.error_description || body.error}`,",
+          "        );",
+          "      }",
+          "",
+          "      pm.environment.set(\"access_token\", body.access_token);",
+          "      pm.environment.set(\"token_expires_at\", String(Date.now() + body.expires_in * 1000));",
+          "      console.log(`Token issued, valid for ${body.expires_in}s. Scopes: ${body.scope}`);",
+          "    },",
+          "  );",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "/**",
+          " * Reports what you need to act on, and nothing else.",
+          " *",
+          " * Branch on `error.code`, never on `detail` — the code is stable across releases, the text is not.",
+          " * Every error carries a `request_id`; quote it when contacting support.",
+          " */",
+          "",
+          "if (pm.response.code === 401) {",
+          "  // The credential may have been revoked, or the token rotated out, before it expired.",
+          "  pm.environment.unset(\"access_token\");",
+          "  pm.environment.set(\"token_expires_at\", \"0\");",
+          "}",
+          "",
+          "pm.test(`${pm.response.code} ${pm.response.status}`, () => {",
+          "  if (pm.response.code < 400) return;",
+          "",
+          "  const body = pm.response.json();",
+          "  const error = body.error || {};",
+          "  const retryAfter = pm.response.headers.get(\"Retry-After\");",
+          "",
+          "  const parts = [error.code || body.error, error.detail || body.error_description];",
+          "  if (error.request_id) parts.push(`request_id=${error.request_id}`);",
+          "  if (retryAfter) parts.push(`Retry-After=${retryAfter}s`);",
+          "",
+          "  pm.expect.fail(parts.filter(Boolean).join(\" | \"));",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.salesbud.com.br",
+      "type": "string",
+      "description": "Overridden by the environment. Defaults to production."
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Issue an access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "oauth",
+                "token"
+              ]
+            },
+            "description": "Issue an access token\n\nNo credential required.\n\nYou do not need to send this: every other request renews on its own. It is here to read back the scopes and lifetime a credential got.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}"
+                },
+                {
+                  "key": "scope",
+                  "value": "",
+                  "description": "Optional. Omit to receive every scope the credential carries.",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/**",
+                  " * The one request that shows you the token instead of using it.",
+                  " *",
+                  " * Every other request renews on its own through the collection's pre-request script, so you never",
+                  " * need to send this one — it is here to inspect the scopes and lifetime a credential actually got.",
+                  " */",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set(\"access_token\", body.access_token);",
+                  "  pm.environment.set(\"token_expires_at\", String(Date.now() + body.expires_in * 1000));",
+                  "",
+                  "  pm.test(\"granted the scopes the credential carries\", () => {",
+                  "    pm.expect(body.token_type).to.eql(\"Bearer\");",
+                  "    pm.expect(body.scope).to.be.a(\"string\");",
+                  "  });",
+                  "",
+                  "  console.log(`Scopes: ${body.scope}`);",
+                  "  console.log(`Expires in: ${body.expires_in}s`);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Context",
+      "item": [
+        {
+          "name": "Get the authenticated integration context",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/context",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "context"
+              ]
+            },
+            "description": "Get the authenticated integration context\n\nRequires any valid access token; no scope beyond authentication."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Meetings",
+      "item": [
+        {
+          "name": "List completed meetings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/meetings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "meetings"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Records per page, 1 to 100. A page may return fewer than this while has_more is still true; drive the loop by has_more, not by the size of data. Max 100.",
+                  "disabled": false
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{meetings_cursor}}",
+                  "description": "Signed cursor returned by the previous page.",
+                  "disabled": false
+                },
+                {
+                  "key": "created_after",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records created after this instant.",
+                  "disabled": true
+                },
+                {
+                  "key": "created_before",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records created before this instant.",
+                  "disabled": true
+                },
+                {
+                  "key": "meeting_after",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records whose event instant is after this value.",
+                  "disabled": true
+                },
+                {
+                  "key": "meeting_before",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records whose event instant is before this value.",
+                  "disabled": true
+                },
+                {
+                  "key": "owner_email",
+                  "value": "owner@example.com",
+                  "description": "Exact case-insensitive owner email match.",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "video",
+                  "description": "Media the record was captured as. Independent of the resource kind: a call can be video and a meeting can be audio. One of: video, audio.",
+                  "disabled": true
+                },
+                {
+                  "key": "audience",
+                  "value": "internal",
+                  "description": "Whether the record had participants from outside the company (external) or only internal ones. One of: internal, external.",
+                  "disabled": true
+                },
+                {
+                  "key": "has_transcript",
+                  "value": "",
+                  "description": "Filter by existence of a transcript resource.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List completed meetings\n\nRequires the `meetings.read` scope.\n\nSend again to walk to the next page: the response stores `next_cursor` in `meetings_cursor` and the first record's id in `meeting_id`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// An empty cursor is not a valid cursor: drop the parameter until a page hands one over.",
+                  "if (!pm.environment.get(\"meetings_cursor\")) {",
+                  "  pm.request.removeQueryParams(\"cursor\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/**",
+                  " * Walks the collection by cursor, and remembers one id for the requests below.",
+                  " *",
+                  " * The loop is driven by `next_cursor`, never by how many records a page returned — a short or even",
+                  " * empty page with `has_more: true` is normal, and stopping on it silently truncates the walk. Send",
+                  " * this request again to get the next page; the cursor is already in place.",
+                  " *",
+                  " * Filters must stay identical across the walk: the cursor is signed and binds them.",
+                  " */",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const page = pm.response.json();",
+                  "  const cursor = page.pagination.next_cursor;",
+                  "",
+                  "  pm.environment.set(\"meetings_cursor\", cursor || \"\");",
+                  "  console.log(",
+                  "    cursor",
+                  "      ? `Page returned ${page.data.length} meetings, has_more=${page.pagination.has_more}. ` +",
+                  "          \"Send again for the next page.\"",
+                  "      : `Page returned ${page.data.length} meetings. No cursor: this was the last page.`,",
+                  "  );",
+                  "",
+                  "  const first = page.data[0];",
+                  "  if (first) {",
+                  "    pm.environment.set(\"meeting_id\", first.id);",
+                  "    console.log(`meeting_id set to ${first.id}`);",
+                  "  } else if (!pm.environment.get(\"meeting_id\")) {",
+                  "    console.log(",
+                  "      \"No record on this page. Set meeting_id by hand (it looks like mtg_…) or widen the filters.\",",
+                  "    );",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one completed meeting",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/meetings/{{meeting_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "meetings",
+                "{{meeting_id}}"
+              ]
+            },
+            "description": "Get one completed meeting\n\nRequires the `meetings.read` scope.\n\n`meeting_id` is filled in by **List completed meetings**, so run that first — or paste an id (`mtg_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "List the default template answers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/meetings/{{meeting_id}}/answers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "meetings",
+                "{{meeting_id}}",
+                "answers"
+              ]
+            },
+            "description": "List the default template answers for a meeting\n\nRequires the `meetings.read` scope.\n\n`meeting_id` is filled in by **List completed meetings**, so run that first — or paste an id (`mtg_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Get the overall evaluation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/meetings/{{meeting_id}}/evaluations/overall",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "meetings",
+                "{{meeting_id}}",
+                "evaluations",
+                "overall"
+              ]
+            },
+            "description": "Get the overall meeting evaluation\n\nRequires the `meetings.read` scope.\n\n`meeting_id` is filled in by **List completed meetings**, so run that first — or paste an id (`mtg_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Get the transcript",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/meetings/{{meeting_id}}/transcript",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "meetings",
+                "{{meeting_id}}",
+                "transcript"
+              ]
+            },
+            "description": "Returns the enhanced transcript when available, otherwise the original transcript. An unavailable transcript is represented by a successful response with available set to false and its current processing status.\n\nRequires both the `meetings.read` and `transcriptions.read` scopes.\n\n`meeting_id` is filled in by **List completed meetings**, so run that first — or paste an id (`mtg_…`) into the environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Calls",
+      "item": [
+        {
+          "name": "List completed calls",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/calls",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "calls"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Records per page, 1 to 100. A page may return fewer than this while has_more is still true; drive the loop by has_more, not by the size of data. Max 100.",
+                  "disabled": false
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{calls_cursor}}",
+                  "description": "Signed cursor returned by the previous page.",
+                  "disabled": false
+                },
+                {
+                  "key": "created_after",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records created after this instant.",
+                  "disabled": true
+                },
+                {
+                  "key": "created_before",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records created before this instant.",
+                  "disabled": true
+                },
+                {
+                  "key": "meeting_after",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records whose event instant is after this value.",
+                  "disabled": true
+                },
+                {
+                  "key": "meeting_before",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return records whose event instant is before this value.",
+                  "disabled": true
+                },
+                {
+                  "key": "owner_email",
+                  "value": "owner@example.com",
+                  "description": "Exact case-insensitive owner email match.",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "video",
+                  "description": "Media the record was captured as. Independent of the resource kind: a call can be video and a meeting can be audio. One of: video, audio.",
+                  "disabled": true
+                },
+                {
+                  "key": "audience",
+                  "value": "internal",
+                  "description": "Whether the record had participants from outside the company (external) or only internal ones. One of: internal, external.",
+                  "disabled": true
+                },
+                {
+                  "key": "has_transcript",
+                  "value": "",
+                  "description": "Filter by existence of a transcript resource.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Calls are the records captured from a VoIP integration, addressed by their own `call_` identifiers. They answer the same five routes as meetings and carry the same fields except `bot_history`: a VoIP capture has no recording bot, so the field is absent, not empty.\n\nRequires the `calls.read` scope.\n\nSend again to walk to the next page: the response stores `next_cursor` in `calls_cursor` and the first record's id in `call_id`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// An empty cursor is not a valid cursor: drop the parameter until a page hands one over.",
+                  "if (!pm.environment.get(\"calls_cursor\")) {",
+                  "  pm.request.removeQueryParams(\"cursor\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/**",
+                  " * Walks the collection by cursor, and remembers one id for the requests below.",
+                  " *",
+                  " * The loop is driven by `next_cursor`, never by how many records a page returned — a short or even",
+                  " * empty page with `has_more: true` is normal, and stopping on it silently truncates the walk. Send",
+                  " * this request again to get the next page; the cursor is already in place.",
+                  " *",
+                  " * Filters must stay identical across the walk: the cursor is signed and binds them.",
+                  " */",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const page = pm.response.json();",
+                  "  const cursor = page.pagination.next_cursor;",
+                  "",
+                  "  pm.environment.set(\"calls_cursor\", cursor || \"\");",
+                  "  console.log(",
+                  "    cursor",
+                  "      ? `Page returned ${page.data.length} calls, has_more=${page.pagination.has_more}. ` +",
+                  "          \"Send again for the next page.\"",
+                  "      : `Page returned ${page.data.length} calls. No cursor: this was the last page.`,",
+                  "  );",
+                  "",
+                  "  const first = page.data[0];",
+                  "  if (first) {",
+                  "    pm.environment.set(\"call_id\", first.id);",
+                  "    console.log(`call_id set to ${first.id}`);",
+                  "  } else if (!pm.environment.get(\"call_id\")) {",
+                  "    console.log(",
+                  "      \"No record on this page. Set call_id by hand (it looks like call_…) or widen the filters.\",",
+                  "    );",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one completed call",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/calls/{{call_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "calls",
+                "{{call_id}}"
+              ]
+            },
+            "description": "Get one completed call\n\nRequires the `calls.read` scope.\n\n`call_id` is filled in by **List completed calls**, so run that first — or paste an id (`call_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "List the default template answers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/calls/{{call_id}}/answers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "calls",
+                "{{call_id}}",
+                "answers"
+              ]
+            },
+            "description": "List the default template answers for a call\n\nRequires the `calls.read` scope.\n\n`call_id` is filled in by **List completed calls**, so run that first — or paste an id (`call_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Get the overall evaluation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/calls/{{call_id}}/evaluations/overall",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "calls",
+                "{{call_id}}",
+                "evaluations",
+                "overall"
+              ]
+            },
+            "description": "Get the overall call evaluation\n\nRequires the `calls.read` scope.\n\n`call_id` is filled in by **List completed calls**, so run that first — or paste an id (`call_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Get the transcript",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/calls/{{call_id}}/transcript",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "calls",
+                "{{call_id}}",
+                "transcript"
+              ]
+            },
+            "description": "Returns the enhanced transcript when available, otherwise the original transcript. An unavailable transcript is represented by a successful response with available set to false and its current processing status.\n\nRequires both the `calls.read` and `transcriptions.read` scopes.\n\n`call_id` is filled in by **List completed calls**, so run that first — or paste an id (`call_…`) into the environment."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Check process liveness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Confirms that the HTTP process is running.\n\nNo credential required.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check process readiness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ]
+            },
+            "description": "Confirms that the signing configuration is valid and that the required MariaDB schema and private Valkey cache are available.\n\nNo credential required.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
