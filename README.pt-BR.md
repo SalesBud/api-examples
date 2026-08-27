@@ -13,18 +13,21 @@ partes que erram com facilidade no código.
 Três coisas respondem pela maioria dos bugs que vemos em primeira integração. Os dois clientes
 tratam delas, então dá para copiar o arquivo para o seu projeto e seguir.
 
-**1. Renovação de token.** Client credentials não tem refresh token — isso é
+**1. [Renovação de token](https://docs.salesbud.com.br/pt-br/guides/authentication/).** Client
+credentials não tem refresh token — isso é
 [por desenho](https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3), não omissão, já que não há
 usuário para reconsentir. Renovar é pedir um token novo. Só por relógio não basta: uma credencial
 pode ser revogada antes do prazo acabar, então um `401` também dispara uma retentativa com token
 novo.
 
-**2. Paginação.** Uma página pode voltar **curta, ou até vazia, com `has_more` em `true`** — o
-serviço limita quanto varre por requisição. Iterar por `data.length` trunca a travessia em
-silêncio. Os dois clientes seguem o `next_cursor` e nunca olham quantos registros a página trouxe.
+**2. [Paginação](https://docs.salesbud.com.br/pt-br/guides/pagination/).** Uma página pode voltar
+**curta, ou até vazia, com `has_more` em `true`** — o serviço limita quanto varre por requisição.
+Iterar por `data.length` trunca a travessia em silêncio. Os dois clientes seguem o `next_cursor` e
+nunca olham quantos registros a página trouxe.
 
-**3. Retentativas.** `429` espera o `Retry-After`; `503` faz backoff exponencial com jitter; todo
-outro 4xx falha na hora, porque repetir requisição inválida falha igual.
+**3. [Retentativas](https://docs.salesbud.com.br/pt-br/guides/rate-limits/).** `429` espera o
+`Retry-After`; `503` faz backoff exponencial com jitter; todo outro 4xx falha na hora, porque
+repetir requisição inválida falha igual.
 
 ## Obtendo credenciais
 
@@ -93,12 +96,15 @@ integração de VoIP fica em `/v1/calls`, com id `call_`. Mesmos campos, mesmas 
 separadas — um id não resolve na outra.
 
 Não deduza o tipo pela mídia: `object` diz se é `meeting` ou `call`, `type` diz só `video` ou
-`audio`, e os dois são independentes. Existem ligações em vídeo e reuniões em áudio.
+`audio`, e os dois são independentes. Existem ligações em vídeo e reuniões em áudio. O
+[guia](https://docs.salesbud.com.br/pt-br/guides/meetings-and-calls/) explica como um registro vira
+uma ou outra.
 
 ## Tratando erros
 
 Ramifique pelo `error.code`. Ele é estável entre versões; o `detail` é texto humano e pode ser
-reescrito.
+reescrito. O [guia de erros](https://docs.salesbud.com.br/pt-br/guides/errors/) lista todos os
+códigos que a API devolve.
 
 ```js
 try {

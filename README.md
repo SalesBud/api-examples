@@ -13,18 +13,20 @@ the parts that are easy to get wrong in code.
 Three things account for most of the bugs we see in first integrations. Both clients encode them,
 so you can copy the file into your project and move on.
 
-**1. Token renewal.** Client credentials has no refresh token — that is
-[by design](https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3), not an omission, since there is
-no user to re-consent. Renewal is asking for a new token. Renewing on a timer alone is not enough:
-a credential can be revoked before the clock runs out, so a `401` also triggers one retry with a
-fresh token.
+**1. [Token renewal](https://docs.salesbud.com.br/guides/authentication/).** Client credentials
+has no refresh token — that is [by design](https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3),
+not an omission, since there is no user to re-consent. Renewal is asking for a new token. Renewing
+on a timer alone is not enough: a credential can be revoked before the clock runs out, so a `401`
+also triggers one retry with a fresh token.
 
-**2. Pagination.** A page can come back **short, or even empty, while `has_more` is still true** —
-the service caps how much it scans per request. Looping on `data.length` silently truncates the
-walk. Both clients follow `next_cursor` and never look at how many records a page returned.
+**2. [Pagination](https://docs.salesbud.com.br/guides/pagination/).** A page can come back
+**short, or even empty, while `has_more` is still true** — the service caps how much it scans per
+request. Looping on `data.length` silently truncates the walk. Both clients follow `next_cursor`
+and never look at how many records a page returned.
 
-**3. Retries.** `429` waits out `Retry-After`; `503` backs off exponentially with jitter; every
-other 4xx fails immediately, because retrying an invalid request just fails again.
+**3. [Retries](https://docs.salesbud.com.br/guides/rate-limits/).** `429` waits out
+`Retry-After`; `503` backs off exponentially with jitter; every other 4xx fails immediately,
+because retrying an invalid request just fails again.
 
 ## Getting credentials
 
@@ -94,11 +96,13 @@ routes, separate collections — an id does not resolve across them.
 
 Do not infer the kind from the media type: `object` says whether it is a `meeting` or a `call`,
 `type` only says `video` or `audio`, and the two are independent. Calls in video and meetings in
-audio both exist.
+audio both exist. The [guide](https://docs.salesbud.com.br/guides/meetings-and-calls/) covers how
+a record becomes one or the other.
 
 ## Handling errors
 
 Branch on `error.code`. It is stable across releases; `detail` is human text and may be reworded.
+The [error guide](https://docs.salesbud.com.br/guides/errors/) lists every code the API returns.
 
 ```js
 try {
