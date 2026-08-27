@@ -88,6 +88,31 @@ for meeting in client.meetings(meeting_after="2026-01-01T00:00:00Z"):
     print(meeting["id"], meeting["title"])
 ```
 
+## Postman
+
+`postman/` carries the whole API as a collection, with the token renewal and the cursor walk
+already wired up. Import both files, select the **Salesbud API** environment, fill in `client_id`
+and `client_secret`, and send.
+
+There is no "get token" step to remember: a pre-request script issues the token when there is
+none, renews it a minute early, and reissues after a `401` — the same rule the two clients above
+follow. **Issue an access token** exists only to read back the scopes and lifetime a credential
+actually got.
+
+**List completed meetings** and **List completed calls** store the first record's id, so the
+requests under them work without copy-paste, and they store `next_cursor` — send the same request
+again to walk to the next page. Every filter the route accepts is there, unchecked. When a request
+fails, the test reports the parts you can act on: `error.code`, the detail, and the `request_id`.
+
+It also runs headless, which is how it was verified:
+
+```bash
+cp postman/salesbud-api.postman_environment.json postman/mine.local.json
+# fill in client_id and client_secret — `*.local.json` is not tracked
+
+npx newman run postman/salesbud-api.postman_collection.json -e postman/mine.local.json
+```
+
 ## Meetings and calls are different collections
 
 A recording captured by the meeting bot lives at `/v1/meetings` with an `mtg_` id. A recording

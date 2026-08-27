@@ -89,6 +89,32 @@ for meeting in client.meetings(meeting_after="2026-01-01T00:00:00Z"):
     print(meeting["id"], meeting["title"])
 ```
 
+## Postman
+
+O `postman/` traz a API inteira como collection, com a renovação de token e a caminhada por cursor
+já resolvidas. Importe os dois arquivos, selecione o environment **Salesbud API**, preencha
+`client_id` e `client_secret`, e mande.
+
+Não existe passo "pegar token" para lembrar: um script de pre-request emite o token quando não há
+nenhum, renova um minuto antes de vencer, e reemite depois de um `401` — a mesma regra que os dois
+clientes acima seguem. O **Issue an access token** existe só para ler de volta os escopos e o tempo
+de vida que a credencial recebeu.
+
+O **List completed meetings** e o **List completed calls** guardam o id do primeiro registro, então
+as requisições abaixo deles funcionam sem copiar e colar, e guardam o `next_cursor` — mande a mesma
+requisição de novo para ir à página seguinte. Todo filtro que a rota aceita está lá, desmarcado.
+Quando uma requisição falha, o teste reporta o que dá para agir: `error.code`, o detalhe, e o
+`request_id`.
+
+Também roda headless, que foi como validamos:
+
+```bash
+cp postman/salesbud-api.postman_environment.json postman/mine.local.json
+# preencha client_id e client_secret — `*.local.json` não é versionado
+
+npx newman run postman/salesbud-api.postman_collection.json -e postman/mine.local.json
+```
+
 ## Reuniões e ligações são coleções diferentes
 
 Uma gravação capturada pelo bot fica em `/v1/meetings`, com id `mtg_`. Uma gravação capturada por
