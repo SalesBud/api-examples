@@ -1,10 +1,10 @@
 # Salesbud API examples
 
-Runnable integrations against the Salesbud API — in Node.js and Python, with no framework and
-almost no dependencies.
+Runnable integrations against the [Salesbud API](https://docs.salesbud.com.br) — in Node.js and
+Python, with no framework and almost no dependencies.
 
-This repository covers the parts that are easy to get wrong in code. The full reference is
-published at `developers.salesbud.com.br`, going live alongside the API.
+Read the [documentation](https://docs.salesbud.com.br) for the contract. This repository is for
+the parts that are easy to get wrong in code.
 
 *Leia em [português](README.pt-BR.md).*
 
