@@ -749,6 +749,215 @@
       ]
     },
     {
+      "name": "Emails",
+      "item": [
+        {
+          "name": "List email conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/emails",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "emails"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Records per page, 1 to 100. A page may return fewer than this while has_more is still true; drive the loop by has_more, not by the size of data. Max 100.",
+                  "disabled": false
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{emails_cursor}}",
+                  "description": "Signed cursor returned by the previous page.",
+                  "disabled": false
+                },
+                {
+                  "key": "last_message_after",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return conversations whose latest message is after this instant. Filters on activity, not on record changes: a conversation that gains a message moves forward and will be seen again.",
+                  "disabled": true
+                },
+                {
+                  "key": "last_message_before",
+                  "value": "2026-01-01T00:00:00Z",
+                  "description": "Return conversations whose latest message is before this instant.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List email conversations, deduplicated across every connected mailbox and ordered by `last_message_at` ascending (oldest activity first).\n\nRequires the `emails.read` scope. Message bodies live under **List conversation messages** and need `emails.content.read` on top.\n\nSend again to walk to the next page: the response stores `next_cursor` in `emails_cursor` and the first record's id in `email_id`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// An empty cursor is not a valid cursor: drop the parameter until a page hands one over.",
+                  "if (!pm.environment.get(\"emails_cursor\")) {",
+                  "  pm.request.removeQueryParams(\"cursor\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "/**",
+                  " * Walks the collection by cursor, and remembers one id for the requests below.",
+                  " *",
+                  " * The loop is driven by `next_cursor`, never by how many records a page returned — a short or even",
+                  " * empty page with `has_more: true` is normal, and stopping on it silently truncates the walk. Send",
+                  " * this request again to get the next page; the cursor is already in place.",
+                  " *",
+                  " * Filters must stay identical across the walk: the cursor is signed and binds them.",
+                  " */",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const page = pm.response.json();",
+                  "  const cursor = page.pagination.next_cursor;",
+                  "",
+                  "  pm.environment.set(\"emails_cursor\", cursor || \"\");",
+                  "  console.log(",
+                  "    cursor",
+                  "      ? `Page returned ${page.data.length} conversations, has_more=${page.pagination.has_more}. ` +",
+                  "          \"Send again for the next page.\"",
+                  "      : `Page returned ${page.data.length} conversations. No cursor: this was the last page.`,",
+                  "  );",
+                  "",
+                  "  const first = page.data[0];",
+                  "  if (first) {",
+                  "    pm.environment.set(\"email_id\", first.id);",
+                  "    // A new conversation resets the message walk: its cursor is bound to the old one.",
+                  "    pm.environment.set(\"email_messages_cursor\", \"\");",
+                  "    console.log(`email_id set to ${first.id}`);",
+                  "  } else if (!pm.environment.get(\"email_id\")) {",
+                  "    console.log(",
+                  "      \"No record on this page. Set email_id by hand (it looks like eml_…) or widen the filters.\",",
+                  "    );",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get an email conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/emails/{{email_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "emails",
+                "{{email_id}}"
+              ]
+            },
+            "description": "Conversation metadata only — participants, mailboxes, linked accounts, timestamps. No message bodies.\n\nRequires the `emails.read` scope.\n\n`email_id` is filled in by **List email conversations**, so run that first — or paste an id (`eml_…`) into the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "List conversation messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/emails/{{email_id}}/messages",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "emails",
+                "{{email_id}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Records per page, 1 to 100. A page may return fewer than this while has_more is still true; drive the loop by has_more, not by the size of data. Max 100.",
+                  "disabled": false
+                },
+                {
+                  "key": "cursor",
+                  "value": "{{email_messages_cursor}}",
+                  "description": "Signed cursor returned by the previous page. Bound to this conversation.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "The messages of one conversation, oldest first, with plain-text bodies and attachment metadata (no attachment content).\n\nRequires both `emails.read` and `emails.content.read`. A credential holding only `emails.read` gets a 403 with code `INSUFFICIENT_SCOPE` here — that is the gate, not a failure.\n\n`email_id` is filled in by **List email conversations**. Send again to walk to the next page: the response stores `next_cursor` in `email_messages_cursor`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// An empty cursor is not a valid cursor: drop the parameter until a page hands one over.",
+                  "if (!pm.environment.get(\"email_messages_cursor\")) {",
+                  "  pm.request.removeQueryParams(\"cursor\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Walk the messages by cursor. The cursor is bound to the conversation; send again for the next page.",
+                  "if (pm.response.code === 200) {",
+                  "  const page = pm.response.json();",
+                  "  const cursor = page.pagination.next_cursor;",
+                  "  pm.environment.set(\"email_messages_cursor\", cursor || \"\");",
+                  "  console.log(",
+                  "    cursor",
+                  "      ? `Page returned ${page.data.length} messages, has_more=${page.pagination.has_more}. Send again for the next page.`",
+                  "      : `Page returned ${page.data.length} messages. No cursor: this was the last page.`,",
+                  "  );",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Health",
       "item": [
         {

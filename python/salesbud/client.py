@@ -168,6 +168,22 @@ class SalesbudClient:
     def call(self, call_id: str) -> dict[str, Any]:
         return self.request(f"/v1/calls/{call_id}")
 
+    def emails(self, **filters: Any) -> Iterator[dict[str, Any]]:
+        """Conversation metadata — participants, mailboxes, linked accounts. Needs ``emails.read``."""
+        return self.list("emails", **filters)
+
+    def email(self, email_id: str) -> dict[str, Any]:
+        return self.request(f"/v1/emails/{email_id}")
+
+    def email_messages(self, email_id: str, **filters: Any) -> Iterator[dict[str, Any]]:
+        """The messages of a conversation, oldest first, with bodies.
+
+        Needs ``emails.content.read`` on top of ``emails.read`` — a credential can hold one without
+        the other, and the route answers 403 ``INSUFFICIENT_SCOPE`` when the content scope is
+        missing.
+        """
+        return self.list(f"emails/{email_id}/messages", **filters)
+
     def transcript(self, collection: str, resource_id: str) -> dict[str, Any]:
         """Needs ``transcriptions.read``, which is granted separately from ``meetings.read``."""
         return self.request(f"/v1/{collection}/{resource_id}/transcript")

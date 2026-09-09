@@ -165,6 +165,24 @@ export class SalesbudClient {
     return this.request(`/v1/calls/${callId}`);
   }
 
+  /** Conversation metadata — participants, mailboxes, linked accounts. Needs `emails.read`. */
+  emails(filters) {
+    return this.list("emails", filters);
+  }
+
+  email(emailId) {
+    return this.request(`/v1/emails/${emailId}`);
+  }
+
+  /**
+   * The messages of a conversation, oldest first, with bodies. Needs `emails.content.read` on top
+   * of `emails.read` — a credential can hold one without the other, and the route answers 403
+   * `INSUFFICIENT_SCOPE` when the content scope is missing.
+   */
+  emailMessages(emailId, filters) {
+    return this.list(`emails/${emailId}/messages`, filters);
+  }
+
   /** Needs the `transcriptions.read` scope, which is granted separately from `meetings.read`. */
   transcript(collection, resourceId) {
     return this.request(`/v1/${collection}/${resourceId}/transcript`);
