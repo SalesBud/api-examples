@@ -50,6 +50,8 @@ node examples/01-authenticate.js
 node examples/02-list-meetings.js 2026-01-01T00:00:00Z
 node examples/03-list-calls.js
 node examples/04-get-transcript.js mtg_...
+node examples/05-list-emails.js
+node examples/06-email-thread.js eml_...
 ```
 
 ```js
@@ -78,6 +80,8 @@ python examples/01_authenticate.py
 python examples/02_list_meetings.py 2026-01-01T00:00:00Z
 python examples/03_list_calls.py
 python examples/04_get_transcript.py mtg_...
+python examples/05_list_emails.py
+python examples/06_email_thread.py eml_...
 ```
 
 ```python
@@ -125,6 +129,20 @@ Não deduza o tipo pela mídia: `object` diz se é `meeting` ou `call`, `type` d
 `audio`, e os dois são independentes. Existem ligações em vídeo e reuniões em áudio. O
 [guia](https://docs.salesbud.com.br/pt-br/guides/meetings-and-calls/) explica como um registro vira
 uma ou outra.
+
+## Conversas de e-mail leem em dois escopos
+
+O `/v1/emails` devolve os metadados da conversa — participantes, mailboxes, contas ligadas,
+timestamps — sob `emails.read`. Os corpos das mensagens ficam em `/v1/emails/{email_id}/messages` e
+precisam de `emails.content.read` **além de** `emails.read`; uma credencial pode ter o primeiro sem
+o segundo, e aí a rota de mensagens responde `403` com code `INSUFFICIENT_SCOPE`. O exemplo `06`
+percorre uma conversa e mostra esse gate.
+
+Uma conversa é deduplicada entre todas as mailboxes conectadas: dois vendedores na mesma thread são
+uma única conversa com duas mailboxes, não dois registros. O `internal` de um participante é
+decidido pelo domínio do endereço — mesma regra para remetente e destinatários — não por a mailbox
+estar conectada. A lista é ordenada por `last_message_at` ascendente, atividade mais antiga
+primeiro.
 
 ## Tratando erros
 

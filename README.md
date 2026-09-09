@@ -49,6 +49,8 @@ node examples/01-authenticate.js
 node examples/02-list-meetings.js 2026-01-01T00:00:00Z
 node examples/03-list-calls.js
 node examples/04-get-transcript.js mtg_...
+node examples/05-list-emails.js
+node examples/06-email-thread.js eml_...
 ```
 
 ```js
@@ -77,6 +79,8 @@ python examples/01_authenticate.py
 python examples/02_list_meetings.py 2026-01-01T00:00:00Z
 python examples/03_list_calls.py
 python examples/04_get_transcript.py mtg_...
+python examples/05_list_emails.py
+python examples/06_email_thread.py eml_...
 ```
 
 ```python
@@ -123,6 +127,19 @@ Do not infer the kind from the media type: `object` says whether it is a `meetin
 `type` only says `video` or `audio`, and the two are independent. Calls in video and meetings in
 audio both exist. The [guide](https://docs.salesbud.com.br/guides/meetings-and-calls/) covers how
 a record becomes one or the other.
+
+## Email conversations read in two scopes
+
+`/v1/emails` returns conversation metadata — participants, mailboxes, linked accounts, timestamps —
+behind `emails.read`. The message bodies live under `/v1/emails/{email_id}/messages` and need
+`emails.content.read` **on top of** `emails.read`; a credential can hold the first without the
+second, and the messages route then answers `403` with code `INSUFFICIENT_SCOPE`. Example `06`
+walks a conversation and shows that gate.
+
+A conversation is deduplicated across every connected mailbox: two sellers on one thread are a
+single conversation with two mailboxes, not two records. `internal` on a participant is decided by
+the address domain — the same rule for senders and recipients — not by whether the mailbox is
+connected. The list is ordered by `last_message_at` ascending, oldest activity first.
 
 ## Handling errors
 
